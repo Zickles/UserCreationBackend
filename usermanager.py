@@ -4,7 +4,8 @@ import string
 import re
 from logging_utils import log_success, log_error, log_warning, log_info
 from yunohost_utils import retry_command_until_success, fetch_yunohost_users, fetch_and_print_users_csv_for_list
-from mongo_utils import save_user_to_db, get_all_users, remove_user_from_db, load_users_from_db, update_db_with_yunohost_users, insert_recovery_emails_and_user_ids
+from mongo_utils import get_all_users, remove_user_from_db, load_users_from_db, update_db_with_yunohost_users, insert_recovery_emails_and_user_ids
+from task_queue_utils import save_task_to_queue, process_tasks
 from email_utils import send_recovery_email
 import sys
 import termios
@@ -50,32 +51,56 @@ def create_user(username, display_name, recovery_email, discord_id=None, verbose
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
 
     command = f'yunohost user create {username} -F "{display_name}" -p "{password}" -d blahaj.land -q 500M'
-    log_info(f"Running command: {command}")
-    
-    try:
-        result = subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if verbose:
-            log_info(result.stdout.decode())
-    except subprocess.CalledProcessError as e:
-        log_error(e.stderr.decode())
-        log_error("Failed to run command to create user")
-        return False
 
     user_data = {
         'Username': username,
         'DisplayName': display_name,
         'RecoveryEmail': recovery_email,
         'DiscordID': discord_id or '',
-        'Timestamp': timestamp
+        'Timestamp': timestamp,
+        'Password': password
     }
-    log_info(f"Attempting to save user to DB: {user_data}")
-    if not save_user_to_db(user_data):
-        log_error("Failed to save user to database")
-        return False
 
-    send_recovery_email(recovery_email, username, password)
-    log_success(f"User {username} created successfully.")
+    task_data = {
+        'action': 'create_user',
+        'ynh_command': command,
+        'status': 'pending',
+        'timestamp': timestamp,
+        'post_action_data': user_data
+    }
+
+    if not save_task_to_queue(task_data):
+        log_error("Failed to save task to database")
+        return False
+    process_tasks()
     return True
+
+    # log_info(f"Running command: {command}")
+    
+    # try:
+    #     result = subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    #     if verbose:
+    #         log_info(result.stdout.decode())
+    # except subprocess.CalledProcessError as e:
+    #     log_error(e.stderr.decode())
+    #     log_error("Failed to run command to create user")
+    #     return False
+
+    # user_data = {
+    #     'Username': username,
+    #     'DisplayName': display_name,
+    #     'RecoveryEmail': recovery_email,
+    #     'DiscordID': discord_id or '',
+    #     'Timestamp': timestamp
+    # }
+    # log_info(f"Attempting to save user to DB: {user_data}")
+    # if not save_user_to_db(user_data):
+    #     log_error("Failed to save user to database")
+    #     return False
+
+    # send_recovery_email(recovery_email, username, password)
+    # log_success(f"User {username} created successfully.")
+    # return True
 
 def reset_password(username, verbose=False):
     all_users = get_all_users(verbose)

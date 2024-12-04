@@ -5,12 +5,15 @@ from yunohost_utils import fetch_yunohost_users, get_user_timestamp
 import datetime
 from datetime import timedelta
 
-client = MongoClient(f"mongodb://{mongo_user}:{mongo_password}@{mongo_host}:{mongo_port}/?directConnection=true&serverSelectionTimeoutMS=2000&authSource=blahajusers&appName=mongosh+2.3.2")
+client = MongoClient(f"mongodb://{mongo_user}:{mongo_password}@{mongo_host}:{mongo_port}/?directConnection=true&serverSelectionTimeoutMS=2000&authSource={mongo_db_name}&appName=mongosh+2.3.2")
 db = client[mongo_db_name]
 users_collection = db['users']
 reset_tokens_collection = db['reset_tokens']
 websites_collection = db['websites']
 makesite_tokens_collection = db['makesite_tokens']
+
+tasks_queue_collection = db['tasks_queue']
+logs_collection = db['logs']
 
 def load_users_from_db():
     users = []
